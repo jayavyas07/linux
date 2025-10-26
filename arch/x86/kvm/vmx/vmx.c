@@ -6532,7 +6532,7 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 	u32 vectoring_info = vmx->idt_vectoring_info;
 	u16 exit_handler_index;
 	u32 basic = exit_reason.basic;
-	 /* === KVM Exit Statistics Patch (your code) === */
+	 /* === KVM Exit Statistics Patch === */
           if (basic < KVM_VMX_MAX_EXIT_REASONS)
               atomic64_inc(&kvm_vmx_exit_counts[basic]);
           atomic64_inc(&kvm_vmx_exit_total);
