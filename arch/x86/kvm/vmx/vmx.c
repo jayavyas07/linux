@@ -86,8 +86,7 @@
 static atomic64_t kvm_vmx_exit_total = ATOMIC64_INIT(0);
 static atomic64_t kvm_vmx_exit_counts[KVM_VMX_MAX_EXIT_REASONS];
 
-static const char *vmx_exit_reason_name(unsigned int r) { /* switch ... */ }
-static void kvm_vmx_maybe_dump_counts(void) { /* pr_info("KVM/VMX: ...") */ }
+
 
 MODULE_AUTHOR("Qumranet");
 MODULE_DESCRIPTION("KVM support for VMX (Intel VT-x) extensions");
@@ -244,6 +243,7 @@ static const char *vmx_exit_reason_name(unsigned int r)
     default: return "UNKNOWN";
     }
 }
+
 
 static void kvm_vmx_maybe_dump_counts(void)
 {
