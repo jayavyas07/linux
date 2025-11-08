@@ -1,9 +1,9 @@
 # CMPE 283 - Assignment 2: KVM VM-Exit Statistics Patch
-[Download the full write-up (.docx)](./images/CMPE283_Assignment2_JayaVyas.docx)
+[Steps of Instructions (.docx)](./images/CMPE283_Assignment2_JayaVyas.docx)
 
 **By:** Jaya Vyas  
 **GitHub Repository:** [https://github.com/jayavyas07/linux](https://github.com/jayavyas07/linux)
-
+**Commit**  **838ba7c** / **3c730fb**
 ---
 
 ## Table of Contents
@@ -59,6 +59,7 @@ sudo apt update && sudo apt install -y build-essential bc flex bison libssl-dev 
 
 ![Clone and Dependencies](./images/image1.png)
 
+
 #### b) Seed the config from the running kernel and accept defaults
 
 ```bash
@@ -66,7 +67,7 @@ cp -v /boot/config-$(uname -r) .config
 yes "" | make olddefconfig
 ```
 
-![Kernel Config](./images/image2.png)
+![Kernel Config](images/image2.png)
 
 #### c) (If needed) Add swap to avoid OOM during build
 
@@ -78,7 +79,7 @@ free -h
 
 *Figure 1: System memory after enabling swap (pre-build)*
 
-![Swap Setup](./images/image3.png)
+![Swap Setup](images/image3.png)
 
 #### d) Build the kernel and modules
 
@@ -88,7 +89,7 @@ make -j"$(nproc)" 2>&1 | tee build.log
 
 *Figure 2: Kernel build in progress / bzImage generation*
 
-![Kernel Build](./images/image4.png)
+![Kernel Build](images/image4.png)
 
 #### e) Install and boot the test kernel to confirm it runs
 
@@ -102,9 +103,9 @@ sudo reboot
 
 *Figure 3: Post-reboot verification and environment checks*
 
-![Post-reboot Verification](./images/image5.png)
+![Post-reboot Verification](images/image5.png)
 
-![Environment Checks](./images/image6.png)
+![Environment Checks](images/image6.png)
 
 ---
 
@@ -152,9 +153,9 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 
 *Figure 5: Insertion point inside `__vmx_handle_exit()` (top of handler)*
 
-![VMX Handler Modification](./images/image7.png)
+![VMX Handler Modification](images/image7.png)
 
-![Code Implementation](./images/image8.png)
+![Code Implementation](images/image8.png)
 
 Optional beacon on module init (helps verify module load):
 
@@ -183,13 +184,13 @@ grep -n "stats patch loaded" ~/linux/arch/x86/kvm/vmx/vmx.c
 grep -n "VM-Exit stats" ~/linux/arch/x86/kvm/vmx/vmx.c
 ```
 
-![Source Code Verification](./images/image9.png)
+![Source Code Verification](images/image9.png)
 
-![Grep Results](./images/image10.png)
+![Grep Results](images/image10.png)
 
 *Figure 6: Successful KVM module build and installation*
 
-![Module Build Success](./images/image11.png)
+![Module Build Success](images/image11.png)
 
 #### c) Reload (or reboot) to ensure the patched module is active
 
@@ -205,7 +206,7 @@ sudo systemctl start libvirtd
 
 *Figure 7: dmesg showing the vmx_init beacon after reload*
 
-![Module Reload](./images/image10.png)
+![Module Reload](images/image10.png)
 
 ---
 
@@ -225,9 +226,9 @@ sudo virsh console inner-ubuntu # login
 for i in {1..50000}; do cat /proc/cpuinfo >/dev/null; done
 ```
 
-![VM Start](./images/image13.png)
+![VM Start](images/image13.png)
 
-![Generate Exits](./images/image14.png)
+![Generate Exits](images/image14.png)
 
 #### c) Watch kernel logs for periodic stats (every 10k total exits)
 
@@ -237,7 +238,7 @@ sudo dmesg -w | grep -E "KVM/VMX: (=====|exit=|vmx_init beacon)"
 
 *Figure 8: VM-Exit statistics printing in dmesg at the configured interval*
 
-![Exit Statistics](./images/image15.png)
+![Exit Statistics](images/image15.png)
 
 ---
 
