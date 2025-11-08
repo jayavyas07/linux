@@ -1,9 +1,9 @@
 # CMPE 283 - Assignment 2: KVM VM-Exit Statistics Patch
 [Steps of Instructions (.docx)](./images/CMPE283_Assignment2_JayaVyas.docx)
 
-**By:** Jaya Vyas  
-**GitHub Repository:** [https://github.com/jayavyas07/linux](https://github.com/jayavyas07/linux)
-**Commit**  **838ba7c** / **3c730fb**
+### **By:** Jaya Vyas  
+### **GitHub Repository:** [https://github.com/jayavyas07/linux](https://github.com/jayavyas07/linux)
+### **Commit**  **838ba7c** / **3c730fb**
 ---
 
 ## Table of Contents
@@ -242,6 +242,7 @@ sudo dmesg -w | grep -E "KVM/VMX: (=====|exit=|vmx_init beacon)"
 
 ---
 
+### Q3: Comment on the frequency of exits – does the number of exits increase at a stable rate? Or are there more exits performed during certain VM operations? Approximately how many exits does a full VM boot entail?
 ## Frequency of Exits
 
 The total exit count increases steadily over time but not at a perfectly constant rate. Spikes occur during:
@@ -254,6 +255,7 @@ Once the guest is idle, exit rate stabilizes. In my measurements, a full VM boot
 
 ---
 
+### Q4: Of the exit types, which are the most frequent? Least?
 ## Exit-Type Frequency (Most vs Least)
 
 | Exit Type | Meaning | Observed Frequency | Context / Notes |
