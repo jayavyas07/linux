@@ -1,18 +1,271 @@
-Linux kernel
-============
+# CMPE 283 - Assignment 2: KVM VM-Exit Statistics Patch
 
-There are several guides for kernel developers and users. These guides can
-be rendered in a number of formats, like HTML and PDF. Please read
-Documentation/admin-guide/README.rst first.
+**By:** Jaya Vyas  
+**GitHub Repository:** [https://github.com/jayavyas07/linux](https://github.com/jayavyas07/linux)
 
-In order to build the documentation, use ``make htmldocs`` or
-``make pdfdocs``.  The formatted documentation can also be read online at:
+---
 
-    https://www.kernel.org/doc/html/latest/
+## Table of Contents
 
-There are various text files in the Documentation/ subdirectory,
-several of them using the reStructuredText markup notation.
+- [Team Contribution](#team-contribution)
+- [Overview](#overview)
+- [Detailed Steps](#detailed-steps)
+  - [Step 1: Kernel Build Test](#step-1-kernel-build-test-on-the-outer-vm)
+  - [Step 2: Edit KVM (VMX) to Add Exit Counters](#step-2-edit-kvm-vmx-to-add-exit-counters--periodic-prints)
+  - [Step 3: Boot Inner VM and Observe Output](#step-3-boot-inner-vm-and-observe-printk-output)
+- [Frequency Analysis](#frequency-of-exits)
+- [Exit-Type Analysis](#exit-type-frequency-most-vs-least)
 
-Please read the Documentation/process/changes.rst file, as it contains the
-requirements for building and running the kernel, and information about
-the problems which may result by upgrading your kernel.
+---
+
+## Team Contribution
+
+This lab was completed individually by me, Jaya Vyas. I researched how KVM handles VM-exits, implemented the per-exit counters and periodic printk in the Intel VMX path, resolved kernel build issues, built and installed the modified kernel/module on the outer VM, enabled nested virtualization, and validated the output by booting and exercising the inner VM.
+
+---
+
+## Overview
+
+This assignment implements VM-exit statistics tracking in the Linux KVM subsystem for Intel VMX. The patch adds:
+
+- Per-exit-type atomic counters
+- Periodic statistics printing to kernel logs
+- Exit reason naming for better debugging
+
+### Quick Start Summary
+
+- Clone the Linux repository into the outer VM
+- Install build dependencies and configure the kernel using the current config
+- Add swap space to ensure smooth kernel build
+- Fix build errors related to trusted keys and recompile
+- Modify `arch/x86/kvm/vmx/vmx.c` to add exit statistics counters and printing logic
+- Build and install the modified KVM modules
+- Reboot and verify the patch with dmesg and nested VM testing
+
+---
+
+## Detailed Steps
+
+### Step 1: Kernel Build Test on the Outer VM
+
+#### a) Clone your GitHub fork onto the outer VM and prepare dependencies
+
+```bash
+git clone https://github.com/jayavyas07/linux.git
+cd linux
+sudo apt update && sudo apt install -y build-essential bc flex bison libssl-dev libelf-dev libncurses-dev dwarves ccache
+```
+
+![Clone and Dependencies](images/image1.png)
+
+#### b) Seed the config from the running kernel and accept defaults
+
+```bash
+cp -v /boot/config-$(uname -r) .config
+yes "" | make olddefconfig
+```
+
+![Kernel Config](images/image2.png)
+
+#### c) (If needed) Add swap to avoid OOM during build
+
+```bash
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h
+```
+
+*Figure 1: System memory after enabling swap (pre-build)*
+
+![Swap Setup](images/image3.png)
+
+#### d) Build the kernel and modules
+
+```bash
+make -j"$(nproc)" 2>&1 | tee build.log
+```
+
+*Figure 2: Kernel build in progress / bzImage generation*
+
+![Kernel Build](images/image4.png)
+
+#### e) Install and boot the test kernel to confirm it runs
+
+```bash
+sudo make modules_install
+sudo make install
+sudo update-initramfs -c -k $(make kernelrelease)
+sudo update-grub
+sudo reboot
+```
+
+*Figure 3: Post-reboot verification and environment checks*
+
+![Post-reboot Verification](images/image5.png)
+
+![Environment Checks](images/image6.png)
+
+---
+
+### Step 2: Edit KVM (VMX) to Add Exit Counters & Periodic Prints
+
+#### a) Modify the Intel VMX path
+
+**File:** `arch/x86/kvm/vmx/vmx.c`
+
+Add the counters and helpers near the top:
+
+```c
+#include <linux/atomic.h>
+#define KVM_VMX_MAX_EXIT_REASONS 128
+#define KVM_VMX_PRINT_INTERVAL 10000 // prints every 10k total exits
+
+static atomic64_t kvm_vmx_exit_total = ATOMIC64_INIT(0);
+static atomic64_t kvm_vmx_exit_counts[KVM_VMX_MAX_EXIT_REASONS];
+
+static const char *vmx_exit_reason_name(unsigned int r) { 
+    /* switch with names */ 
+}
+
+static void kvm_vmx_maybe_dump_counts(void) { 
+    /* printk header + per-exit lines */ 
+}
+```
+
+Hook in at the start of the VM-exit handler:
+
+```c
+static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
+{
+    union vmx_exit_reason exit_reason = vmx_get_exit_reason(vcpu);
+    u32 basic = exit_reason.basic;
+    
+    if (basic < KVM_VMX_MAX_EXIT_REASONS)
+        atomic64_inc(&kvm_vmx_exit_counts[basic]);
+    atomic64_inc(&kvm_vmx_exit_total);
+    kvm_vmx_maybe_dump_counts();
+    
+    /* ... rest of handler ... */
+}
+```
+
+*Figure 5: Insertion point inside `__vmx_handle_exit()` (top of handler)*
+
+![VMX Handler Modification](images/image7.png)
+
+![Code Implementation](images/image8.png)
+
+Optional beacon on module init (helps verify module load):
+
+```c
+int __init vmx_init(void)
+{
+    pr_info("KVM/VMX: stats patch loaded (vmx_init beacon)\n");
+    /* ... */
+}
+```
+
+#### b) Rebuild and install only the KVM modules for this running kernel
+
+```bash
+make M=arch/x86/kvm -j"$(nproc)" modules
+sudo make M=arch/x86/kvm modules_install INSTALL_MOD_DIR=kernel
+sudo depmod -a "$(uname -r)"
+sudo cp -v arch/x86/kvm/kvm-intel.ko "$(modinfo -n kvm_intel)"
+sudo depmod -a "$(uname -r)"
+```
+
+After patching the code in `vmx.c`, git push and then git fetch to O-vm and finally check through grep if we have our source code:
+
+```bash
+grep -n "stats patch loaded" ~/linux/arch/x86/kvm/vmx/vmx.c
+grep -n "VM-Exit stats" ~/linux/arch/x86/kvm/vmx/vmx.c
+```
+
+![Source Code Verification](images/image9.png)
+
+![Grep Results](images/image10.png)
+
+*Figure 6: Successful KVM module build and installation*
+
+![Module Build Success](images/image11.png)
+
+#### c) Reload (or reboot) to ensure the patched module is active
+
+```bash
+sudo virsh list --state-running # destroy guest if running
+sudo systemctl stop libvirtd virtqemud virtlogd
+sudo modprobe -r kvm_intel kvm || true
+sudo modprobe kvm
+sudo modprobe kvm_intel nested=1
+sudo systemctl start libvirtd
+# (or simply: sudo reboot)
+```
+
+*Figure 7: dmesg showing the vmx_init beacon after reload*
+
+![Module Reload](images/image10.png)
+
+---
+
+### Step 3: Boot Inner VM and Observe printk Output
+
+#### a) Enable nested KVM (if not already)
+
+```bash
+echo Y | sudo tee /sys/module/kvm_intel/parameters/nested
+```
+
+#### b) Start and attach to the inner VM, then generate exits
+
+```bash
+sudo virsh start inner-ubuntu
+sudo virsh console inner-ubuntu # login
+for i in {1..50000}; do cat /proc/cpuinfo >/dev/null; done
+```
+
+![VM Start](images/image13.png)
+
+![Generate Exits](images/image14.png)
+
+#### c) Watch kernel logs for periodic stats (every 10k total exits)
+
+```bash
+sudo dmesg -w | grep -E "KVM/VMX: (=====|exit=|vmx_init beacon)"
+```
+
+*Figure 8: VM-Exit statistics printing in dmesg at the configured interval*
+
+![Exit Statistics](images/image15.png)
+
+---
+
+## Frequency of Exits
+
+The total exit count increases steadily over time but not at a perfectly constant rate. Spikes occur during:
+
+- CPU feature discovery (e.g., CPUID)
+- MSR accesses
+- Memory management events (e.g., EPT violations), especially during boot
+
+Once the guest is idle, exit rate stabilizes. In my measurements, a full VM boot generated approximately **400K–500K total exits**.
+
+---
+
+## Exit-Type Frequency (Most vs Least)
+
+| Exit Type | Meaning | Observed Frequency | Context / Notes |
+|-----------|---------|-------------------|-----------------|
+| CPUID (9) | CPU feature query | Very frequent | During kernel/userspace init and library probing |
+| HLT (12) | Guest idle loop | Frequent | When waiting for interrupts / scheduler idle |
+| RDMSR/WRMSR (30/31) | Model-specific register access | Moderate | System setup and drivers |
+| EPT_VIOLATION (48) | MMU translation fault | Common | Boot/memory mapping activity |
+| EPT_MISCONFIG (49) | Invalid EPT mapping | Occasional | Early boot / misconfig paths |
+| UNKNOWN | Unlabeled exit reasons | Rare | Any exit not explicitly named in the switch |
+
+---
+
+## Contact
+
+**Jaya Vyas**  
+GitHub: [@jayavyas07](https://github.com/jayavyas07)
